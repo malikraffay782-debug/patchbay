@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Patchbay · MCP web client</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230E6B5A'/%3E%3Ccircle cx='9' cy='16' r='3.2' fill='white'/%3E%3Ccircle cx='23' cy='16' r='3.2' fill='white'/%3E%3Cpath d='M12 16h8' stroke='white' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+  <aside id="side" aria-label="Sidebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <span>Patchbay</span>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tabBtnChats" data-tab="chats" aria-selected="true">Chats</button>
+      <button role="tab" id="tabBtnServers" data-tab="servers" aria-selected="false">Servers <span id="srvCount" class="count"></span></button>
+    </div>
+
+    <section id="tab-chats" class="pane">
+      <button id="newChat" class="btn primary wide" type="button">New chat</button>
+      <ul id="chatList" class="list"></ul>
+    </section>
+
+    <section id="tab-servers" class="pane" hidden>
+      <button id="addServer" class="btn primary wide" type="button">Add MCP server</button>
+      <ul id="serverList" class="list"></ul>
+      <p class="hint">Servers must be remote and use https. Anthropic’s API connects to them, not your browser.</p>
+      <div class="row">
+        <button id="expServers" class="btn" type="button">Export</button>
+        <button id="impServers" class="btn" type="button">Import</button>
+        <input id="impFile" type="file" accept="application/json,.json" hidden>
+      </div>
+    </section>
+
+    <div class="side-foot">
+      <button id="openSettings" class="btn wide" type="button">Settings</button>
+    </div>
+  </aside>
+  <div id="scrim"></div>
+
+  <main>
+    <header class="top">
+      <button id="menu" class="btn icon" type="button" aria-label="Open sidebar">Menu</button>
+      <h1 id="title">New chat</h1>
+      <div id="chips" class="chips"></div>
+      <button id="exportChat" class="btn" type="button">Export</button>
+    </header>
+
+    <div id="banner" class="banner" hidden></div>
+    <div id="log" aria-live="polite"></div>
+
+    <form id="composer" autocomplete="off">
+      <textarea id="input" rows="1" placeholder="Ask something that needs your tools…" aria-label="Message"></textarea>
+      <button id="sendBtn" class="btn primary" type="submit">Send</button>
+    </form>
+  </main>
+</div>
+
+<dialog id="serverDlg">
+  <form id="serverForm" autocomplete="off">
+    <h2 id="serverDlgTitle">Add MCP server</h2>
+    <input type="hidden" id="sId">
+    <label>Name
+      <input id="sName" required maxlength="64" placeholder="my-server" spellcheck="false">
+      <small>Letters, numbers, - and _. Claude sees this name next to each tool.</small>
+    </label>
+    <label>URL
+      <input id="sUrl" type="url" required placeholder="https://example.com/mcp" spellcheck="false">
+    </label>
+    <label>Authorization token (optional)
+      <span class="inline">
+        <input id="sToken" type="password" spellcheck="false" autocomplete="off">
+        <button id="showTok" class="btn" type="button">Show</button>
+      </span>
+      <small>Sent as a Bearer token. Stored only in this browser’s localStorage.</small>
+    </label>
+    <p id="sErr" class="err" role="alert"></p>
+    <div class="dlg-actions">
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit">Save server</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settingsDlg">
+  <form id="settingsForm">
+    <h2>Settings</h2>
+    <label>Model
+      <input id="setModel" list="modelList" spellcheck="false" placeholder="Server default">
+      <datalist id="modelList"></datalist>
+    </label>
+    <div class="two">
+      <label>Max output tokens
+        <input id="setMax" type="number" min="1" max="32000" step="1">
+      </label>
+      <label>Temperature (0 to 1)
+        <input id="setTemp" type="number" min="0" max="1" step="0.1" placeholder="Default">
+      </label>
+    </div>
+    <label>System prompt
+      <textarea id="setSys" rows="4" placeholder="Optional instructions applied to every chat."></textarea>
+    </label>
+    <label>Theme
+      <select id="setTheme">
+        <option value="auto">Match system</option>
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+    <div class="dlg-actions spread">
+      <button id="wipe" class="btn danger" type="button">Delete all local data</button>
+      <span>
+        <button class="btn" type="button" data-close>Cancel</button>
+        <button class="btn primary" type="submit">Save</button>
+      </span>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="authDlg">
+  <form id="authForm">
+    <h2>Password required</h2>
+    <label>App password
+      <input id="pw" type="password" autocomplete="current-password" required>
+    </label>
+    <p id="authErr" class="err" role="alert"></p>
+    <div class="dlg-actions"><button class="btn primary" type="submit">Unlock</button></div>
+  </form>
+</dialog>
+
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
