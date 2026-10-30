@@ -179,11 +179,10 @@
       if (m.role === 'user') {
         out.push({ role: 'user', content: m.text });
       } else if (m.role === 'assistant') {
-        // Prefer structured blocks when available (the fix for multi-turn)
+        // Prefer structured blocks when available (multi-turn tool context)
         if (Array.isArray(m.blocks) && m.blocks.length) {
-          // Keep only the blocks the API understands
           const blocks = m.blocks.filter((b) =>
-            b && ['text', 'mcp_tool_use', 'mcp_tool_result', 'mcp_tool_listing'].includes(b.type)
+            b && ['text', 'mcp_tool_use', 'mcp_tool_result'].includes(b.type)
           );
           if (blocks.length) {
             out.push({ role: 'assistant', content: blocks });
@@ -215,32 +214,44 @@
     return c == null ? '' : JSON.stringify(c, null, 2);
   }
 
+  /**
+   * Prepare blocks for localStorage + UI display.
+   * Never invent fake inputs. Prefer dropping oversized data over corrupting
+   * the structure that will later be sent back to the API.
+   */
   function slimBlocks(blocks) {
-    return (blocks || []).filter((b) => b && ['text', 'mcp_tool_use', 'mcp_tool_result', 'mcp_tool_listing'].includes(b.type)).map((b) => {
+    return (blocks || []).filter((b) => b && ['text', 'mcp_tool_use', 'mcp_tool_result'].includes(b.type)).map((b) => {
       if (b.type === 'mcp_tool_result') {
+        // Keep original shape when possible; only truncate long text content
+        let content = b.content;
+        if (typeof content === 'string' && content.length > MAX_STORED_RESULT) {
+          content = content.slice(0, MAX_STORED_RESULT) + `\n… (${content.length - MAX_STORED_RESULT} more characters)`;
+        } else if (Array.isArray(content)) {
+          // Flatten to a single text string for storage size; API accepts string
+          const joined = resultText(b);
+          content = joined.length > MAX_STORED_RESULT
+            ? joined.slice(0, MAX_STORED_RESULT) + `\n… (${joined.length - MAX_STORED_RESULT} more characters)`
+            : joined;
+        }
         return {
           type: b.type,
           tool_use_id: b.tool_use_id,
           is_error: Boolean(b.is_error),
-          content: trunc(resultText(b), MAX_STORED_RESULT),
+          content,
         };
       }
-      if (b.type === 'mcp_tool_listing') {
+      if (b.type === 'mcp_tool_use') {
+        // Keep full input. If it is enormous we still keep it for correctness;
+        // localStorage pressure is handled by chat count / wipe, not by lying to the model.
         return {
           type: b.type,
-          mcp_server_name: b.mcp_server_name,
-          tools: Array.isArray(b.tools) ? b.tools.slice(0, 40) : [],
+          id: b.id,
+          name: b.name,
+          server_name: b.server_name,
+          input: b.input == null ? {} : b.input,
         };
       }
-      // mcp_tool_use – keep input but protect size
-      if (b.type === 'mcp_tool_use') {
-        let input = b.input;
-        try {
-          const s = JSON.stringify(input);
-          if (s.length > 12000) input = { _truncated: true, preview: s.slice(0, 8000) + '…' };
-        } catch (_) { /* ignore */ }
-        return { type: b.type, id: b.id, name: b.name, server_name: b.server_name, input };
-      }
+      // text
       return b;
     });
   }
@@ -364,7 +375,7 @@
     if (u) notes.push(`${u.input_tokens || 0} in`, `${u.output_tokens || 0} out`);
     if (m.stop === 'max_tokens') notes.push('cut off: raise max output tokens');
     if (m.stop === 'refusal') notes.push('declined by the model');
-    if (m.stop === 'pause_turn') notes.push('paused (continued)');
+    if (m.stop === 'pause_turn') notes.push('incomplete (max continuations reached)');
     return `<article class="msg bot"><div class="body">${blocksHtml(m)}</div><div class="meta">`
       + notes.map((n) => `<span>${n}</span>`).join('')
       + `<button class="mini" data-act="copy" data-i="${i}" type="button">Copy</button>`
@@ -680,7 +691,7 @@
     const temp = $('#setTemp').value.trim();
     state.settings = {
       model: $('#setModel').value.trim(),
-      maxTokens: Number.isFinite(max) ? Math.min(Math.max(max, 1), 32000) : 4096,
+      maxTokens: Number.isFinite(max) ? Math.min(Math.max(max, 1), 128000) : 4096,
       temperature: temp === '' ? '' : Math.min(Math.max(Number(temp) || 0, 0), 1),
       system: $('#setSys').value,
       theme: $('#setTheme').value,

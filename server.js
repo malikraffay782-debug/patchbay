@@ -97,9 +97,8 @@ function isValidContentBlock(b) {
   if (t === 'mcp_tool_result') {
     return typeof b.tool_use_id === 'string';
   }
-  if (t === 'mcp_tool_listing') return typeof b.mcp_server_name === 'string';
-  // allow other future blocks without breaking
-  return typeof t === 'string';
+  // Only known MCP-related blocks. Reject everything else (document, image, etc.)
+  return false;
 }
 
 function normalizeContent(c) {
@@ -131,10 +130,14 @@ function validate(b) {
 
   const model = String(b.model || DEFAULT_MODEL).trim();
   if (!/^[\w.:\-/]{1,100}$/.test(model)) throw new Error('Invalid model name.');
+  if (MODELS.length && !MODELS.includes(model)) {
+    throw new Error(`Model "${model}" is not allowed. Allowed: ${MODELS.join(', ')}`);
+  }
 
   let maxTokens = parseInt(b.maxTokens, 10);
   if (!Number.isFinite(maxTokens)) maxTokens = 4096;
-  maxTokens = Math.min(Math.max(maxTokens, 1), 32000);
+  // Claude 5.5 models support up to 128k output tokens
+  maxTokens = Math.min(Math.max(maxTokens, 1), 128000);
 
   let temperature = null;
   if (b.temperature !== '' && b.temperature != null) {
@@ -210,7 +213,7 @@ app.get('/api/config', (req, res) => {
   });
 });
 
-app.post('/api/check', requireAuth, (req, res) => res.json({ ok: true }));
+app.post('/api/check', rateLimit, requireAuth, (req, res) => res.json({ ok: true }));
 
 app.post('/api/chat', requireAuth, rateLimit, async (req, res) => {
   if (!API_KEY) {
